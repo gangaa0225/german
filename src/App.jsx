@@ -89,6 +89,7 @@ const ss  = (k,v)  => { try { localStorage.setItem(k,JSON.stringify(v)); } catch
 const getUsers   = () => ls("u_db_v4",{});
 const saveUsers  = u => ss("u_db_v4",u);
 const getBankInfo= () => ls("bank_v4",{});
+const validateEmail = email => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email||"").trim().toLowerCase());
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const SEED_CARDS = [
@@ -206,6 +207,9 @@ export default function App() {
   const [authView, setAuthView] = useState("login");
   const [authForm, setAuthForm] = useState({name:"",email:"",password:""});
   const [authError, setAuthError] = useState("");
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotForm, setForgotForm] = useState({email:"",password:"",confirm:""});
 
   // ── admin
   const [showAdmin, setShowAdmin] = useState(false);
@@ -315,31 +319,45 @@ export default function App() {
   // ── auth
   const handleRegister = () => {
     setAuthError("");
-    if(!authForm.name||!authForm.email||!authForm.password) return setAuthError("Бүх талбарыг бөглөнө үү.");
-    if(authForm.password.length<6) return setAuthError("Нууц үг 6+ тэмдэгт байх ёстой.");
+    const name = authForm.name.trim();
+    const email = authForm.email.trim().toLowerCase();
+    const password = authForm.password;
+    if(!name||!email||!password) return setAuthError("Бүх талбарыг бөглөнө үү.");
+    if(!validateEmail(email)) return setAuthError("Зөв имэйл хаяг оруулна уу.");
+    if(password.length<6) return setAuthError("Нууц үг 6+ тэмдэгт байх ёстой.");
     const users=getUsers();
-    if(users[authForm.email]) return setAuthError("Энэ имэйл бүртгэлтэй байна.");
-    const u={name:authForm.name,email:authForm.email,password:authForm.password,trialStart:Date.now(),premium:false};
-    users[authForm.email]=u; saveUsers(users); setUser(u);
+    if(users[email]) return setAuthError("Энэ имэйл бүртгэлтэй байна.");
+    const u={name,email,password,trialStart:Date.now(),premium:false};
+    users[email]=u; saveUsers(users); setUser(u); setShowAuthModal(false);
   };
   const handleLogin = () => {
     setAuthError("");
-    const users=getUsers(); const u=users[authForm.email];
+    const email = authForm.email.trim().toLowerCase();
+    if(!validateEmail(email)) return setAuthError("Зөв имэйл хаяг оруулна уу.");
+    const users=getUsers(); const u=users[email];
     if(!u||u.password!==authForm.password) return setAuthError("Имэйл эсвэл нууц үг буруу.");
-    setUser(u);
+    setUser(u); setShowAuthModal(false);
     if(Math.floor((Date.now()-u.trialStart)/86400000)>=TRIAL_DAYS&&!u.premium) setTimeout(()=>setShowPaywall(true),400);
   };
-  const activateCode = () => {
-    setCodeError("");
-    const codes=ls("premium_codes_v4",{});
-    if(!codes[accessCode.trim()]||codes[accessCode.trim()].used) return setCodeError("Код буруу эсвэл ашиглагдсан байна.");
-    codes[accessCode.trim()].used=true; ss("premium_codes_v4",codes);
-    const users=getUsers(); users[user.email].premium=true; saveUsers(users);
-    setUser(u=>({...u,premium:true})); setShowPaywall(false); setAccessCode("");
-    addXP(100); setToast("🎉 Premium идэвхжлээ! +100 XP");
+  const handleForgotPassword = () => {
+    const email = forgotForm.email.trim().toLowerCase();
+    if(!validateEmail(email)) return setAuthError("Зөв имэйл хаяг оруулна уу.");
+    if(forgotForm.password.length<6) return setAuthError("Шинэ нууц үг 6+ тэмдэгт байх ёстой.");
+    if(forgotForm.password!==forgotForm.confirm) return setAuthError("Нууц үгнүүд таарахгүй байна.");
+    const users=getUsers();
+    if(!users[email]) return setAuthError("Ийм имэйлтэй бүртгэл олдсонгүй.");
+    users[email] = { ...users[email], password: forgotForm.password };
+    saveUsers(users);
+    setShowForgotModal(false);
+    setForgotForm({email:"",password:"",confirm:""});
+    setAuthView("login");
+    setAuthForm(p=>({...p,email,password:""}));
+    setAuthError("");
+    setToast("🔑 Нууц үг шинэчлэгдлээ. Одоо нэвтэрч болно.");
   };
 
   // ── admin
+
   const adminLogin=()=>{ if(adminPwd===ls("admin_key_v4","germanadmin2024")){setAdminAuth(true);setAdminPwd("");}else setAdminMsg("Нууц үг буруу."); };
   const flash=msg=>{ setAdminMsg(msg); setTimeout(()=>setAdminMsg(""),2500); };
   const saveCard=()=>{
@@ -458,6 +476,46 @@ export default function App() {
       </div>
     </nav>
   );
+  const AuthModal=()=>!showAuthModal?null:(
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:120,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={e=>e.target===e.currentTarget&&setShowAuthModal(false)}>
+      <div style={{ ...S.card,width:"100%",maxWidth:430,padding:"28px 24px",position:"relative" }}>
+        <button onClick={()=>{setShowAuthModal(false);setShowForgotModal(false);setAuthError("");}} style={{ position:"absolute",top:14,right:14,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,width:34,height:34,cursor:"pointer",color:C.muted }}>✕</button>
+        {!showForgotModal?(<>
+          <div style={{ textAlign:"center",marginBottom:24 }}>
+            <div style={{ fontSize:42,marginBottom:10 }}>🇩🇪</div>
+            <h2 style={{ fontSize:28,fontWeight:800,margin:"0 0 6px",background:`linear-gradient(135deg,${C.accent},${C.accentL})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent" }}>ГерманАнки</h2>
+            <p style={{ color:C.muted,fontSize:14,margin:0 }}>Үргэлжлүүлэхийн тулд нэвтэрнэ үү</p>
+          </div>
+          <div style={{ display:"flex",background:C.surface,borderRadius:10,padding:4,marginBottom:22,gap:4 }}>
+            {[["login","Нэвтрэх"],["register","Бүртгүүлэх"]].map(([v,l])=>(
+              <button key={v} onClick={()=>{setAuthView(v);setAuthError("");}} style={{ flex:1,padding:"9px",background:authView===v?C.card:"none",border:"none",borderRadius:8,color:authView===v?C.text:C.muted,cursor:"pointer",fontSize:14,fontWeight:authView===v?600:400 }}>{l}</button>
+            ))}
+          </div>
+          {authView==="register"&&<div style={{ marginBottom:14 }}>{S.lbl("Нэр",false)}<input value={authForm.name} onChange={e=>setAuthForm(p=>({...p,name:e.target.value}))} placeholder="Таны нэр" style={S.inp()} /></div>}
+          <div style={{ marginBottom:14 }}>{S.lbl("Имэйл",false)}<input value={authForm.email} onChange={e=>setAuthForm(p=>({...p,email:e.target.value}))} placeholder="email@example.com" type="email" style={S.inp()} /></div>
+          <div style={{ marginBottom:12 }}>{S.lbl("Нууц үг",false)}<input value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} placeholder="••••••" type="password" style={S.inp()} onKeyDown={e=>e.key==="Enter"&&(authView==="login"?handleLogin():handleRegister())} /></div>
+          {authView==="login"&&<div style={{ textAlign:"right",marginBottom:14 }}><button onClick={()=>{setShowForgotModal(true);setAuthError("");setForgotForm({email:authForm.email,password:"",confirm:""});}} style={{ background:"none",border:"none",padding:0,color:C.accentL,cursor:"pointer",fontSize:13 }}>Нууц үгээ мартсан уу?</button></div>}
+          {authError&&<div style={{ marginBottom:14,padding:"10px 14px",background:C.red+"18",borderRadius:8,color:C.red,fontSize:13 }}>{authError}</div>}
+          <button style={{ ...S.btn(C.accent),width:"100%",padding:14,fontSize:15 }} onClick={authView==="login"?handleLogin:handleRegister}>{authView==="login"?"Нэвтрэх →":"Бүртгүүлж эхлэх →"}</button>
+        </>):(<>
+          <div style={{ textAlign:"center",marginBottom:20 }}>
+            <div style={{ fontSize:38,marginBottom:8 }}>🔑</div>
+            <h2 style={{ margin:"0 0 6px",fontSize:24 }}>Нууц үг сэргээх</h2>
+            <p style={{ color:C.muted,fontSize:14,margin:0 }}>Одоогоор энэ нь зөвхөн энэ браузер дотор хадгалсан бүртгэлд ажиллана.</p>
+          </div>
+          <div style={{ marginBottom:12 }}>{S.lbl("Имэйл",false)}<input value={forgotForm.email} onChange={e=>setForgotForm(p=>({...p,email:e.target.value}))} placeholder="email@example.com" type="email" style={S.inp()} /></div>
+          <div style={{ marginBottom:12 }}>{S.lbl("Шинэ нууц үг",false)}<input value={forgotForm.password} onChange={e=>setForgotForm(p=>({...p,password:e.target.value}))} placeholder="••••••" type="password" style={S.inp()} /></div>
+          <div style={{ marginBottom:14 }}>{S.lbl("Давтаж оруулах",false)}<input value={forgotForm.confirm} onChange={e=>setForgotForm(p=>({...p,confirm:e.target.value}))} placeholder="••••••" type="password" style={S.inp()} onKeyDown={e=>e.key==="Enter"&&handleForgotPassword()} /></div>
+          {authError&&<div style={{ marginBottom:14,padding:"10px 14px",background:C.red+"18",borderRadius:8,color:C.red,fontSize:13 }}>{authError}</div>}
+          <div style={{ display:"flex",gap:10 }}>
+            <button style={{ ...S.ghost(),flex:1 }} onClick={()=>{setShowForgotModal(false);setAuthError("");}}>← Буцах</button>
+            <button style={{ ...S.btn(C.green),flex:1 }} onClick={handleForgotPassword}>Хадгалах</button>
+          </div>
+        </>)}
+      </div>
+    </div>
+  );
+
   const PaywallModal=()=>!showPaywall?null:(
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
       <div style={{ ...S.card,width:"100%",maxWidth:480,border:`1px solid ${C.gold}50` }}>
@@ -690,28 +748,75 @@ export default function App() {
   );
 
   // ══════════════════════════════════════════════════════════
-  // AUTH SCREEN
+  // PUBLIC LANDING / AUTH
   // ══════════════════════════════════════════════════════════
   if(!user) return(
-    <div style={{ ...S.wrap,display:"flex",alignItems:"center",justifyContent:"center",padding:16,minHeight:"100vh",background:`radial-gradient(ellipse at top, #1a1040 0%, ${C.bg} 60%)` }}>
-      <div style={{ width:"100%",maxWidth:420 }}>
-        <div style={{ textAlign:"center",marginBottom:32 }}>
-          <div style={{ fontSize:56,marginBottom:10 }}>🇩🇪</div>
-          <h1 style={{ fontSize:32,fontWeight:800,margin:"0 0 6px",background:`linear-gradient(135deg,${C.accent},${C.accentL})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent" }}>ГерманАнки</h1>
-          <p style={{ color:C.muted,fontSize:14,margin:"0 0 12px" }}>Монголчуудад зориулсан Герман хэлний систем</p>
-          <span style={{ ...S.tag(C.green),fontSize:13,padding:"5px 14px" }}>✓ {TRIAL_DAYS} өдөр үнэгүй · {FREE_ARTICLE_LIMIT} нийтлэл үнэгүй</span>
-        </div>
-        <div style={{ ...S.card,padding:"28px 24px" }}>
-          <div style={{ display:"flex",background:C.surface,borderRadius:10,padding:4,marginBottom:22,gap:4 }}>
-            {[["login","Нэвтрэх"],["register","Бүртгүүлэх"]].map(([v,l])=>(
-              <button key={v} onClick={()=>{setAuthView(v);setAuthError("");}} style={{ flex:1,padding:"9px",background:authView===v?C.card:"none",border:"none",borderRadius:8,color:authView===v?C.text:C.muted,cursor:"pointer",fontSize:14,fontWeight:authView===v?600:400 }}>{l}</button>
-            ))}
+    <div style={{ ...S.wrap,minHeight:"100vh",background:`radial-gradient(ellipse at top, #1a1040 0%, ${C.bg} 60%)` }}>
+      <Toast/>
+      <AuthModal/>
+      <div style={{ maxWidth:980,margin:"0 auto",padding:"28px 16px 40px" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:28,flexWrap:"wrap" }}>
+          <div>
+            <div style={{ fontWeight:800,fontSize:20,background:`linear-gradient(135deg,${C.accent},${C.accentL})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent" }}>🇩🇪 ГерманАнки</div>
+            <div style={{ color:C.muted,fontSize:13,marginTop:4 }}>Монголчуудад зориулсан Герман хэлний систем</div>
           </div>
-          {authView==="register"&&<div style={{ marginBottom:14 }}>{S.lbl("Нэр",false)}<input value={authForm.name} onChange={e=>setAuthForm(p=>({...p,name:e.target.value}))} placeholder="Таны нэр" style={S.inp()} /></div>}
-          <div style={{ marginBottom:14 }}>{S.lbl("Имэйл",false)}<input value={authForm.email} onChange={e=>setAuthForm(p=>({...p,email:e.target.value}))} placeholder="email@example.com" type="email" style={S.inp()} /></div>
-          <div style={{ marginBottom:20 }}>{S.lbl("Нууц үг",false)}<input value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} placeholder="••••••" type="password" style={S.inp()} onKeyDown={e=>e.key==="Enter"&&(authView==="login"?handleLogin():handleRegister())} /></div>
-          {authError&&<div style={{ marginBottom:14,padding:"10px 14px",background:C.red+"18",borderRadius:8,color:C.red,fontSize:13 }}>{authError}</div>}
-          <button style={{ ...S.btn(C.accent),width:"100%",padding:14,fontSize:15 }} onClick={authView==="login"?handleLogin:handleRegister}>{authView==="login"?"Нэвтрэх →":"Бүртгүүлж эхлэх →"}</button>
+          <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>
+            <button style={S.ghost()} onClick={()=>{setAuthView("login");setShowForgotModal(false);setShowAuthModal(true);}}>Нэвтрэх</button>
+            <button style={S.btn(`linear-gradient(135deg,${C.accent},${C.accentL})`)} onClick={()=>{setAuthView("register");setShowForgotModal(false);setShowAuthModal(true);}}>Үнэгүй эхлэх</button>
+          </div>
+        </div>
+
+        <div style={{ ...S.card,padding:"34px 28px",marginBottom:18,background:`linear-gradient(135deg,#17193a,#101327)` }}>
+          <div style={{ maxWidth:640 }}>
+            <div style={{ ...S.tag(C.green),marginBottom:14,fontSize:13,padding:"5px 14px" }}>✓ {TRIAL_DAYS} өдөр үнэгүй · {FREE_ARTICLE_LIMIT} нийтлэл үнэгүй</div>
+            <h1 style={{ fontSize:42,lineHeight:1.08,margin:"0 0 12px",fontWeight:900 }}>Герман үгсээ карт, блог, XP системтэйгээр сур.</h1>
+            <p style={{ color:C.muted,fontSize:16,lineHeight:1.7,margin:"0 0 18px" }}>Эхлээд хүмүүс танай апп дотор юу байгааг харна. Таалагдвал л бүртгүүлнэ. Энэ landing page яг тэр логикоор ажиллана.</p>
+            <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>
+              <button style={S.btn(`linear-gradient(135deg,${C.accent},${C.accentL})`)} onClick={()=>{setAuthView("register");setShowForgotModal(false);setShowAuthModal(true);}}>Бүртгүүлж эхлэх</button>
+              <button style={S.ghost()} onClick={()=>window.scrollTo({top:780,behavior:"smooth"})}>Юу байгааг харах ↓</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12,marginBottom:18 }}>
+          <StatCard icon="🃏" label="Нийт карт" value={cards.length} color={C.accentL} />
+          <StatCard icon="📖" label="Нийтлэл" value={posts.length} color={C.teal} />
+          <StatCard icon="⚡" label="Gamified XP" value="Level up" color={C.gold} />
+          <StatCard icon="🔐" label="Туршилт" value={`${TRIAL_DAYS} өдөр`} color={C.green} />
+        </div>
+
+        <div style={{ display:"grid",gridTemplateColumns:"1.1fr 0.9fr",gap:16,alignItems:"start" }}>
+          <div style={S.card}>
+            <div style={{ fontWeight:700,fontSize:18,marginBottom:14 }}>🃏 Картны жишээ</div>
+            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              {cards.slice(0,3).map(c=>(
+                <div key={c.id} style={{ background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 18px" }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap" }}>
+                    <strong style={{ fontSize:18 }}>{c.german}</strong>
+                    <span style={{ color:C.dim }}>→</span>
+                    <span style={{ color:C.mongolian,fontWeight:700 }}>{c.mongolian}</span>
+                  </div>
+                  {c.example&&<div style={{ color:C.muted,fontSize:13,lineHeight:1.6 }}>{c.example}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={S.card}>
+            <div style={{ fontWeight:700,fontSize:18,marginBottom:14 }}>📚 Блогийн жишээ</div>
+            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+              {posts.slice(0,3).map(p=>(
+                <div key={p.id} style={{ background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px" }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap" }}>
+                    <span style={S.tag(C.accentL)}>{p.tag}</span>
+                    <span style={{ color:C.dim,fontSize:12 }}>{p.readTime} мин</span>
+                  </div>
+                  <div style={{ fontWeight:700,marginBottom:6,lineHeight:1.4 }}>{p.title}</div>
+                  <div style={{ color:C.muted,fontSize:13 }}>{p.titleDe||"Герман хэлний practical тайлбар"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
