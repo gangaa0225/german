@@ -752,8 +752,8 @@ export default function App() {
   // ══════════════════════════════════════════════════════════
   if(!user) return(
     <div style={{ ...S.wrap,minHeight:"100vh",background:`radial-gradient(ellipse at top, #1a1040 0%, ${C.bg} 60%)` }}>
-      <Toast/>
-      <AuthModal/>
+      {Toast()}
+     {AuthModal()}
       <div style={{ maxWidth:980,margin:"0 auto",padding:"28px 16px 40px" }}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:28,flexWrap:"wrap" }}>
           <div>
