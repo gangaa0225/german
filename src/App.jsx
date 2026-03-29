@@ -1,5 +1,117 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "./supabase";
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+
+  // 🔐 Get session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user || null);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  // 🔑 AUTH
+  const handleAuth = async () => {
+    if (!email || !password) return alert("Fill all fields");
+
+    if (isLogin) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) return alert(error.message);
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      });
+
+      if (error) return alert(error.message);
+      alert("Check your email!");
+    }
+
+    setShowAuth(false);
+    setEmail("");
+    setPassword("");
+    setName("");
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  // 🌍 LANDING PAGE (NO LOGIN REQUIRED)
+  if (!user) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h1>ГерманАнки</h1>
+        <p>Монголчуудад зориулсан Герман хэл</p>
+
+        <button onClick={() => setShowAuth(true)}>Нэвтрэх</button>
+
+        {showAuth && (
+          <div style={{ marginTop: 20 }}>
+            {!isLogin && (
+              <input
+                placeholder="Нэр"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            )}
+
+            <input
+              placeholder="Имэйл"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <input
+              type="password"
+              placeholder="Нууц үг"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button onClick={handleAuth}>
+              {isLogin ? "Нэвтрэх" : "Бүртгүүлэх"}
+            </button>
+
+            <p onClick={() => setIsLogin(!isLogin)} style={{ cursor: "pointer" }}>
+              {isLogin ? "Бүртгүүлэх үү?" : "Нэвтрэх үү?"}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ✅ AFTER LOGIN
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>Нүүр</h2>
+
+      <p>Сайн байна уу 👋</p>
+      <p>{user.email}</p>
+
+      <button onClick={logout}>Гарах</button>
+    </div>
+  );
+}
 // ─── DESIGN SYSTEM (Uxcel-inspired dark navy) ────────────────────────────────
 const C = {
   bg:       "#0d0e1a",   // deep navy background
