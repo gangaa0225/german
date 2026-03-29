@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-
+import { supabase } from "./supabase";
 // ─── DESIGN SYSTEM (Uxcel-inspired dark navy) ────────────────────────────────
 const C = {
   bg:       "#0d0e1a",   // deep navy background
@@ -330,15 +329,21 @@ export default function App() {
     const u={name,email,password,trialStart:Date.now(),premium:false};
     users[email]=u; saveUsers(users); setUser(u); setShowAuthModal(false);
   };
-  const handleLogin = () => {
-    setAuthError("");
-    const email = authForm.email.trim().toLowerCase();
-    if(!validateEmail(email)) return setAuthError("Зөв имэйл хаяг оруулна уу.");
-    const users=getUsers(); const u=users[email];
-    if(!u||u.password!==authForm.password) return setAuthError("Имэйл эсвэл нууц үг буруу.");
-    setUser(u); setShowAuthModal(false);
-    if(Math.floor((Date.now()-u.trialStart)/86400000)>=TRIAL_DAYS&&!u.premium) setTimeout(()=>setShowPaywall(true),400);
-  };
+  const handleLogin = async () => {
+  setAuthError("");
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: authForm.email,
+    password: authForm.password
+  });
+
+  if (error) {
+    setAuthError("Имэйл эсвэл нууц үг буруу");
+  } else {
+    setToast("Амжилттай нэвтэрлээ!");
+    setShowAuthModal(false);
+  }
+};
   const handleForgotPassword = () => {
     const email = forgotForm.email.trim().toLowerCase();
     if(!validateEmail(email)) return setAuthError("Зөв имэйл хаяг оруулна уу.");
