@@ -9,20 +9,25 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Only allow POST
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
-    // 1. Verify the caller is a logged-in admin user
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return new Response("Unauthorized", { status: 401 });
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const anonClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -31,12 +36,21 @@ serve(async (req) => {
     );
 
     const { data: { user }, error: userError } = await anonClient.auth.getUser();
-    if (userError || !user) return new Response("Unauthorized", { status: 401 });
-    if (!ADMIN_EMAILS.includes(user.email!)) {
-      return new Response("Forbidden", { status: 403 });
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // 2. Use service role client for admin operations
+    if (!user.email || !ADMIN_EMAILS.includes(user.email)) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -47,23 +61,26 @@ serve(async (req) => {
     if (action === "list") {
       const { data, error } = await adminClient.auth.admin.listUsers();
       if (error) throw error;
+
       return new Response(JSON.stringify({ users: data.users }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (action === "grant") {
-      // Validate payload
-      if (!userId || !premiumUntil || typeof premiumUntil !== "number") {
+      if (!userId || typeof premiumUntil !== "number" || premiumUntil <= Date.now()) {
         return new Response(JSON.stringify({ error: "Invalid payload" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
       const { error } = await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: { premium: true, premiumUntil }
       });
+
       if (error) throw error;
+
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -76,19 +93,26 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
       const { error } = await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: { premium: false, premiumUntil: null }
       });
+
       if (error) throw error;
+
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response("Unknown action", { status: 400 });
-
+    return new Response(JSON.stringify({ error: "Unknown action" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    const message = err instanceof Error ? err.message : "Unknown error";
+
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
