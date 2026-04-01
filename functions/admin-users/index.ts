@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ADMIN_EMAILS = ["YOUR_ADMIN_EMAIL@example.com"]; // 👈 replace with your email
+const ADMIN_EMAILS = ["gangaa0225@gmail.com"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +9,14 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Only allow POST
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
   }
 
   try {
@@ -47,6 +53,13 @@ serve(async (req) => {
     }
 
     if (action === "grant") {
+      // Validate payload
+      if (!userId || !premiumUntil || typeof premiumUntil !== "number") {
+        return new Response(JSON.stringify({ error: "Invalid payload" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const { error } = await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: { premium: true, premiumUntil }
       });
@@ -57,6 +70,12 @@ serve(async (req) => {
     }
 
     if (action === "revoke") {
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "Invalid payload" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const { error } = await adminClient.auth.admin.updateUserById(userId, {
         user_metadata: { premium: false, premiumUntil: null }
       });
